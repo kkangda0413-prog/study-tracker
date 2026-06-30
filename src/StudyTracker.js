@@ -52,7 +52,7 @@ function slotKey(h, m) { return `${h}_${m}`; }
 // /users/{uid}/weeks/{weekKey} → { goals: [...] }
 // /users/{uid}/days/{dateKey}  → { goals: [...], timetable: {}, reflection: "" }
 
-export default function StudyTracker({ user, onLogout }) {
+export default function StudyTracker({ user, onLogout, onSwitchVersion }) {
   const uid = user.uid;
   const realToday = getTodayKey();
 
@@ -318,6 +318,7 @@ export default function StudyTracker({ user, onLogout }) {
             <div style={{ fontSize:17, fontWeight:700, color:"#3D4EC6" }}>{Math.floor(totalMins/60)}h {totalMins%60}m</div>
           </div>
           <button style={S.certBtn} onClick={() => setCertModal(true)}>📸 인증하기</button>
+          <button style={S.switchBtn} onClick={onSwitchVersion}>🎯 심플 모드</button>
           <button style={S.logoutBtn} onClick={onLogout}>로그아웃</button>
         </div>
       </div>
@@ -665,6 +666,7 @@ const S = {
   headerSub: { fontSize:12, color:"#999", marginTop:2, margin:0 },
   statChip: { background:"#f0f0f5", padding:"7px 14px", borderRadius:10 },
   certBtn: { padding:"9px 16px", background:"#6B7CFF", color:"white", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontFamily:"inherit", fontWeight:500 },
+  switchBtn: { padding:"9px 14px", background:"#f0f0f5", color:"#6B7CFF", border:"0.5px solid #d4d6f5", borderRadius:10, cursor:"pointer", fontSize:13, fontFamily:"inherit", fontWeight:500 },
   logoutBtn: { padding:"9px 14px", background:"#f5f5f5", color:"#888", border:"0.5px solid #e0e0e0", borderRadius:10, cursor:"pointer", fontSize:13, fontFamily:"inherit" },
   datebar: { background:"#fff", borderBottom:"0.5px solid #eee", padding:"12px 20px" },
   calTrigger: { display:"flex", alignItems:"center", gap:8, padding:"7px 14px", background:"#f0f0f5", border:"0.5px solid #e0e0e0", borderRadius:10, cursor:"pointer", fontFamily:"inherit", fontSize:14, fontWeight:500, color:"#333" },
