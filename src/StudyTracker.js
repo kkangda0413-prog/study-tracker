@@ -195,16 +195,21 @@ export default function StudyTracker({ user, onLogout, onSwitchVersion }) {
       const patch = { ...pendingTT.current };
       pendingTT.current = {};
       try {
-        // Use merge so we only update changed slots, not the whole timetable
+        // NOTE: setDoc(..., {merge:true}) deep-merges nested map fields, so
+        // keys we deleted locally would silently survive on the server.
+        // We must fully REPLACE the timetable field instead of merging it.
         const ref = doc(db, "users", uid, "days", selectedDate);
         const snap = await getDoc(ref);
         const existing = snap.exists() ? (snap.data().timetable ?? {}) : {};
-        // Apply patch over existing
         const merged = { ...existing };
         Object.entries(patch).forEach(([k, v]) => {
           if (v == null) delete merged[k]; else merged[k] = v;
         });
-        await setDoc(ref, { timetable: merged, updatedAt: serverTimestamp() }, { merge: true });
+        if (snap.exists()) {
+          await updateDoc(ref, { timetable: merged, updatedAt: serverTimestamp() });
+        } else {
+          await setDoc(ref, { timetable: merged, updatedAt: serverTimestamp() });
+        }
       } catch (e) {
         console.error("Timetable save error:", e);
       }
