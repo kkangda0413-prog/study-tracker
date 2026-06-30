@@ -186,9 +186,8 @@ export default function StudyTracker({ user, onLogout, onSwitchVersion }) {
       if (val == null) delete newTT[sk]; else newTT[sk] = val;
       return { ...prev, [selectedDate]: { ...old, timetable: newTT } };
     });
-    // 2) Accumulate pending changes
-    if (val == null) delete pendingTT.current[sk];
-    else pendingTT.current[sk] = val;
+    // 2) Accumulate pending changes (val may be null, meaning "erase this slot")
+    pendingTT.current[sk] = val;
     // 3) Debounce: flush after 600ms of inactivity
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {

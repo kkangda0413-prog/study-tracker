@@ -61,7 +61,13 @@ const STYLE = `
   margin: 0 auto;
 }
 
-.tt-header { margin-bottom: 22px; }
+.tt-header {
+  margin-bottom: 22px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
 .tt-eyebrow {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -76,6 +82,29 @@ const STYLE = `
   font-size: 22px;
   font-style: italic;
   color: var(--ink);
+}
+.tt-cal-btn {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--teal);
+  background: var(--teal-soft);
+  border: none;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tt-cal-btn:hover { filter: brightness(0.97); }
+.tt-today-pill {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border: none;
+  border-radius: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  margin-top: 6px;
 }
 
 .tt-card {
@@ -230,11 +259,18 @@ const STYLE = `
 .tt-week-item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 7px 0;
   font-size: 13px;
   border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  background: none;
+  border-left: none; border-right: none; border-top: none;
+  width: 100%;
+  font-family: inherit;
 }
 .tt-week-item:last-child { border-bottom: none; }
+.tt-week-item:hover { background: var(--paper); }
 .tt-week-date { color: var(--ink-soft); }
 .tt-week-value { font-family: var(--font-mono); color: var(--ink); }
 .tt-week-value.is-recovery { color: var(--teal); }
@@ -268,9 +304,79 @@ const STYLE = `
   color: var(--ink-faint);
   margin-top: 10px;
 }
+
+.tt-cal-backdrop {
+  position: fixed; inset: 0; z-index: 149;
+  background: rgba(36,38,32,0.35);
+}
+.tt-cal-overlay {
+  position: fixed; inset: 0; z-index: 150;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 70px;
+}
+.tt-cal-popup {
+  background: var(--paper-card);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  padding: 20px;
+  width: 320px;
+  box-shadow: 0 8px 40px rgba(36,38,32,0.18);
+}
+.tt-cal-nav {
+  background: none; border: none; cursor: pointer;
+  font-size: 20px; color: var(--ink-soft); padding: 4px 8px;
+  font-family: var(--font-body);
+}
+.tt-cal-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--ink);
+}
+.tt-cal-dow {
+  width: 38px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--ink-faint); font-family: var(--font-body);
+}
+.tt-cal-day {
+  width: 38px; height: 38px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  position: relative;
+}
+.tt-cal-day:hover { background: var(--paper); }
+.tt-cal-day.is-today { color: var(--amber); font-weight: 600; }
+.tt-cal-day.is-selected { background: var(--ink); color: var(--paper-card); font-weight: 600; }
+.tt-cal-day.is-future { color: var(--ink-faint); cursor: default; }
+.tt-cal-day.is-future:hover { background: transparent; }
+.tt-cal-day .tt-cal-mark {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--amber);
+  position: absolute; bottom: 4px;
+}
+.tt-cal-day.is-selected .tt-cal-mark { background: var(--paper-card); }
+.tt-cal-day .tt-cal-mark.is-recovery { background: var(--teal); }
+.tt-cal-go-today {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 16px;
+  cursor: pointer;
+}
 `;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 
 function dateKey(d) {
   const y = d.getFullYear();
@@ -278,12 +384,18 @@ function dateKey(d) {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+function keyToDate(k) {
+  const [y, m, d] = k.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+function monthKey(y, m) { return `${y}-${String(m + 1).padStart(2, "0")}`; }
 
 const DEFAULT_DAY = { blocks: 0, recovery: false };
 
 export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
   const uid = user.uid;
-  const [todayKey, setTodayKey] = useState(() => dateKey(new Date()));
+  const [realToday, setRealToday] = useState(() => dateKey(new Date()));
+  const [viewedKey, setViewedKey] = useState(() => dateKey(new Date()));
   const [loading, setLoading] = useState(true);
   const [todayData, setTodayData] = useState(DEFAULT_DAY);
   const [saveError, setSaveError] = useState(false);
@@ -293,15 +405,25 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
   const [weekLoading, setWeekLoading] = useState(false);
   const [weekData, setWeekData] = useState([]);
 
+  const [showCal, setShowCal] = useState(false);
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
+  const [calLoading, setCalLoading] = useState(false);
+  const monthCache = useRef({});
+  const [, forceTick] = useState(0);
+
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
 
-  // ── Firestore helpers: /users/{uid}/simpleDays/{dateKey} ──────────────
+  const isViewingToday = viewedKey === realToday;
+
   const loadDay = useCallback(async (dk) => {
     try {
       const ref = doc(db, "users", uid, "simpleDays", dk);
       const snap = await getDoc(ref);
-      return snap.exists() ? { blocks: snap.data().blocks ?? 0, recovery: snap.data().recovery ?? false } : { ...DEFAULT_DAY };
+      return snap.exists()
+        ? { blocks: snap.data().blocks ?? 0, recovery: snap.data().recovery ?? false }
+        : { ...DEFAULT_DAY };
     } catch {
       return { ...DEFAULT_DAY };
     }
@@ -312,6 +434,11 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
       const ref = doc(db, "users", uid, "simpleDays", dk);
       await setDoc(ref, data, { merge: true });
       setSaveError(false);
+      const mk = dk.slice(0, 7);
+      if (monthCache.current[mk]) {
+        monthCache.current[mk][dk] = data;
+        forceTick((t) => t + 1);
+      }
     } catch {
       setSaveError(true);
     }
@@ -321,71 +448,73 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const data = await loadDay(todayKey);
+      const data = await loadDay(viewedKey);
       if (!cancelled) {
         setTodayData(data);
         setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [todayKey, loadDay]);
+  }, [viewedKey, loadDay]);
 
   useEffect(() => {
     const id = setInterval(() => {
       const k = dateKey(new Date());
-      if (k !== todayKey) {
-        setTodayKey(k);
-        setShowWeekly(false);
-        setConfirmingReset(false);
-      }
+      setRealToday((prevReal) => {
+        if (k !== prevReal) {
+          setViewedKey((prevViewed) => (prevViewed === prevReal ? k : prevViewed));
+          return k;
+        }
+        return prevReal;
+      });
     }, 60 * 1000);
     return () => clearInterval(id);
-  }, [todayKey]);
+  }, []);
 
   const addBlock = useCallback(() => {
     setTodayData((prev) => {
       const next = { ...prev, blocks: prev.blocks + 1 };
-      saveDay(todayKey, next);
+      saveDay(viewedKey, next);
       return next;
     });
-  }, [todayKey, saveDay]);
+  }, [viewedKey, saveDay]);
 
   const undoLast = useCallback(() => {
     setTodayData((prev) => {
       if (prev.blocks === 0) return prev;
       const next = { ...prev, blocks: prev.blocks - 1 };
-      saveDay(todayKey, next);
+      saveDay(viewedKey, next);
       return next;
     });
-  }, [todayKey, saveDay]);
+  }, [viewedKey, saveDay]);
 
   const toggleRecovery = useCallback(() => {
     setTodayData((prev) => {
       const next = { ...prev, recovery: !prev.recovery };
-      saveDay(todayKey, next);
+      saveDay(viewedKey, next);
       return next;
     });
-  }, [todayKey, saveDay]);
+  }, [viewedKey, saveDay]);
 
   const doReset = useCallback(() => {
     const next = { ...DEFAULT_DAY };
     setTodayData(next);
-    saveDay(todayKey, next);
+    saveDay(viewedKey, next);
     setConfirmingReset(false);
-  }, [todayKey, saveDay]);
+  }, [viewedKey, saveDay]);
 
   const openWeekly = useCallback(async () => {
     const next = !showWeekly;
     setShowWeekly(next);
-    if (next && weekData.length === 0) {
+    if (next) {
       setWeekLoading(true);
-      const today = new Date();
+      const base = keyToDate(realToday);
       const days = [];
       for (let i = 6; i >= 0; i--) {
-        const d = new Date(today.getTime() - i * DAY_MS);
+        const d = new Date(base.getTime() - i * DAY_MS);
         const dk = dateKey(d);
         const data = await loadDay(dk);
-        const label = i === 0
+        const label = dk === realToday
           ? "오늘"
           : new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(d);
         days.push({ date: dk, label, blocks: data.blocks, recovery: data.recovery });
@@ -395,13 +524,76 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
         setWeekLoading(false);
       }
     }
-  }, [showWeekly, weekData.length, loadDay]);
+  }, [showWeekly, realToday, loadDay]);
 
-  const formattedDate = new Intl.DateTimeFormat("ko-KR", {
-    month: "long",
-    day: "numeric",
-    weekday: "long",
-  }).format(new Date());
+  // ── Calendar ───────────────────────────────────────────────────────────
+  const loadMonth = useCallback(async (y, m) => {
+    const mk = monthKey(y, m);
+    if (monthCache.current[mk]) return;
+    setCalLoading(true);
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const todayD = keyToDate(realToday);
+    const entries = {};
+    const tasks = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateObj = new Date(y, m, d);
+      if (dateObj > todayD) continue;
+      const dk = dateKey(dateObj);
+      tasks.push(loadDay(dk).then((data) => { entries[dk] = data; }));
+    }
+    await Promise.all(tasks);
+    monthCache.current[mk] = entries;
+    if (mounted.current) {
+      setCalLoading(false);
+      forceTick((t) => t + 1);
+    }
+  }, [loadDay, realToday]);
+
+  const openCalendar = useCallback(() => {
+    const willOpen = !showCal;
+    setShowCal(willOpen);
+    if (willOpen) {
+      const base = keyToDate(viewedKey);
+      setCalYear(base.getFullYear());
+      setCalMonth(base.getMonth());
+      loadMonth(base.getFullYear(), base.getMonth());
+    }
+  }, [showCal, viewedKey, loadMonth]);
+
+  const prevMonth = useCallback(() => {
+    let y = calYear, m = calMonth - 1;
+    if (m < 0) { m = 11; y -= 1; }
+    setCalYear(y); setCalMonth(m);
+    loadMonth(y, m);
+  }, [calYear, calMonth, loadMonth]);
+
+  const nextMonth = useCallback(() => {
+    let y = calYear, m = calMonth + 1;
+    if (m > 11) { m = 0; y += 1; }
+    setCalYear(y); setCalMonth(m);
+    loadMonth(y, m);
+  }, [calYear, calMonth, loadMonth]);
+
+  const selectCalDate = useCallback((d) => {
+    const todayD = keyToDate(realToday);
+    if (d > todayD) return;
+    setViewedKey(dateKey(d));
+    setShowCal(false);
+    setShowWeekly(false);
+    setConfirmingReset(false);
+  }, [realToday]);
+
+  const buildCalendarCells = (y, m) => {
+    const firstDow = new Date(y, m, 1).getDay();
+    const days = new Date(y, m + 1, 0).getDate();
+    const cells = Array.from({ length: firstDow }, () => null);
+    for (let d = 1; d <= days; d++) cells.push(new Date(y, m, d));
+    return cells;
+  };
+
+  const formattedDate = isViewingToday
+    ? new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "long" }).format(new Date())
+    : new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "long" }).format(keyToDate(viewedKey));
 
   const blocks = todayData.blocks;
   const recovery = todayData.recovery;
@@ -410,9 +602,13 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
   const weekTotalMinutes = weekData.reduce((sum, d) => sum + d.blocks * 10, 0);
 
   let subtext;
-  if (recovery && blocks === 0) subtext = "오늘은 회복일";
+  if (recovery && blocks === 0) subtext = "이 날은 회복일";
   else if (blocks === 0) subtext = "아직 채운 칸이 없어요";
   else subtext = `${blocks}칸 채웠어요`;
+
+  const calCells = buildCalendarCells(calYear, calMonth);
+  const calMonthData = monthCache.current[monthKey(calYear, calMonth)] || {};
+  const todayD = keyToDate(realToday);
 
   return (
     <div className="tt-root">
@@ -429,8 +625,14 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
 
       <div className="tt-inner">
         <div className="tt-header">
-          <div className="tt-eyebrow">오늘</div>
-          <div className="tt-date">{formattedDate}</div>
+          <div>
+            <div className="tt-eyebrow">{isViewingToday ? "오늘" : "기록 보기"}</div>
+            <div className="tt-date">{formattedDate}</div>
+            {!isViewingToday && (
+              <button className="tt-today-pill" onClick={() => setViewedKey(realToday)}>오늘로 돌아가기</button>
+            )}
+          </div>
+          <button className="tt-cal-btn" onClick={openCalendar}>📅 달력</button>
         </div>
 
         <div className="tt-card">
@@ -446,7 +648,7 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
                 <div className="tt-subtext">{subtext}</div>
               </div>
 
-              <div className="tt-trail" aria-label={`오늘 채운 ${blocks}칸`}>
+              <div className="tt-trail" aria-label={`${blocks}칸`}>
                 {Array.from({ length: blocks }).map((_, i) => (
                   <span key={i} className="tt-dot" style={{ animationDelay: `${i * 0.03}s` }} />
                 ))}
@@ -464,7 +666,7 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
 
               <label className="tt-recovery-toggle">
                 <input type="checkbox" checked={recovery} onChange={toggleRecovery} />
-                <span>오늘은 회복일이에요</span>
+                <span>이 날은 회복일이에요</span>
               </label>
 
               <hr className="tt-divider" />
@@ -484,11 +686,13 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
                       </div>
                       <ul className="tt-week-list">
                         {weekData.map((d) => (
-                          <li key={d.date} className="tt-week-item">
-                            <span className="tt-week-date">{d.label}</span>
-                            <span className={`tt-week-value${d.recovery ? " is-recovery" : ""}`}>
-                              {d.recovery ? "회복일" : `${d.blocks * 10}분`}
-                            </span>
+                          <li key={d.date}>
+                            <button className="tt-week-item" onClick={() => { setViewedKey(d.date); setShowWeekly(false); }}>
+                              <span className="tt-week-date">{d.label}</span>
+                              <span className={`tt-week-value${d.recovery ? " is-recovery" : ""}`}>
+                                {d.recovery ? "회복일" : `${d.blocks * 10}분`}
+                              </span>
+                            </button>
                           </li>
                         ))}
                       </ul>
@@ -500,7 +704,7 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
               <div className="tt-reset-row">
                 {!confirmingReset ? (
                   <button className="tt-reset-link" onClick={() => setConfirmingReset(true)}>
-                    오늘 기록 초기화
+                    이 날 기록 초기화
                   </button>
                 ) : (
                   <span className="tt-reset-confirm">
@@ -516,6 +720,61 @@ export default function SimpleTracker({ user, onLogout, onSwitchVersion }) {
           )}
         </div>
       </div>
+
+      {showCal && (
+        <>
+          <div className="tt-cal-backdrop" onClick={() => setShowCal(false)} />
+          <div className="tt-cal-overlay">
+            <div className="tt-cal-popup">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <button className="tt-cal-nav" onClick={prevMonth}>‹</button>
+                <span className="tt-cal-title">{calYear}년 {calMonth + 1}월</span>
+                <button className="tt-cal-nav" onClick={nextMonth}>›</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7,38px)", gap: 2, justifyContent: "center", marginBottom: 4 }}>
+                {DOW.map((d) => <div key={d} className="tt-cal-dow">{d}</div>)}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7,38px)", gap: 2, justifyContent: "center" }}>
+                {calCells.map((d, i) => {
+                  if (!d) return <div key={`e${i}`} />;
+                  const dk = dateKey(d);
+                  const isFuture = d > todayD;
+                  const isToday = dk === realToday;
+                  const isSelected = dk === viewedKey;
+                  const dayData = calMonthData[dk];
+                  const hasBlocks = dayData && dayData.blocks > 0;
+                  const hasRecoveryOnly = dayData && dayData.recovery && dayData.blocks === 0;
+                  return (
+                    <button
+                      key={dk}
+                      className={`tt-cal-day${isToday ? " is-today" : ""}${isSelected ? " is-selected" : ""}${isFuture ? " is-future" : ""}`}
+                      onClick={() => selectCalDate(d)}
+                      disabled={isFuture}
+                    >
+                      {d.getDate()}
+                      {(hasBlocks || hasRecoveryOnly) && (
+                        <span className={`tt-cal-mark${hasRecoveryOnly ? " is-recovery" : ""}`} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed var(--line)", display: "flex", justifyContent: "center" }}>
+                {calLoading ? (
+                  <span className="tt-muted">불러오는 중...</span>
+                ) : (
+                  <button
+                    className="tt-cal-go-today"
+                    onClick={() => { selectCalDate(new Date()); setCalYear(new Date().getFullYear()); setCalMonth(new Date().getMonth()); }}
+                  >
+                    오늘로 이동
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
